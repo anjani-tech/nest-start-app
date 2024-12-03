@@ -10,7 +10,7 @@ env:
   ECR_REPOSITORY: nestjs-server-demo         # ECR repository name
   ECS_SERVICE: nestjs-server-demo-service   # ECS service name
   ECS_CLUSTER: nestjs-server-demo-cluster   # ECS cluster name
-  ECS_TASK_DEFINITION: nestjs-server-demo-task # ECS task definition file path (e.g., .aws/task-definition.json)
+  ECS_TASK_DEFINITION_NAME: nestjs-server-demo-task  # ECS task definition family name
   CONTAINER_NAME: nestjs-server-demo-container # Container name in ECS task definition
 
 jobs:
@@ -32,40 +32,54 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # Step 3: Login to Amazon ECR Public
-      - name: Login to Amazon ECR Public
-        id: login-ecr-public
+      # Step 3: Login to Amazon ECR
+      - name: Login to Amazon ECR
+        id: login-ecr
         uses: aws-actions/amazon-ecr-login@62f4f872db3836360b72999f4b87f1ff13310f3a
         with:
-          registry: ${{ secrets.ECR_REGISTRY }}  # Use the ECR Public registry URL here
+          registry: ${{ secrets.ECR_REGISTRY }}  # Use the ECR registry URL here
 
-      # Step 4: Build, tag, and push the Docker image to Amazon ECR Public
-      - name: Build, tag, and push image to Amazon ECR Public
+      # Step 4: Build, tag, and push the Docker image to Amazon ECR
+      - name: Build, tag, and push image to Amazon ECR
         id: build-image
         env:
-          ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}  # ECR Public registry URL
+          ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}  # ECR registry URL
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          # Build the Docker image and push it to ECR Public
-          aws ecr-public get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
+          # Build the Docker image and push it to ECR
+          aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
-      # Step 5: Render ECS task definition with the new image
-      - name: Fill in the new image ID in the Amazon ECS task definition
-        id: task-def
-        uses: aws-actions/amazon-ecs-render-task-definition@c804dfbdd57f713b6c079302a4c01db7017a36fc
-        with:
-          task-definition: ${{ env.ECS_TASK_DEFINITION }}
-          container-name: ${{ env.CONTAINER_NAME }}
-          image: ${{ steps.build-image.outputs.image }}
+      # Step 5: Get the latest ECS task definition from AWS
+      - name: Get ECS task definition from AWS
+        id: get-task-def
+        run: |
+          aws ecs describe-task-definitions --family-prefix ${{ env.ECS_TASK_DEFINITION_NAME }} --max-items 1 --query "taskDefinitionArns[0]" --output text > task-definition-arn.txt
+          TASK_DEF_ARN=$(cat task-definition-arn.txt)
+          aws ecs describe-task-definitions --task-definition $TASK_DEF_ARN --query "taskDefinitions[0]" > ecs-task-definition.json
 
-      # Step 6: Deploy ECS task definition to the service
-      - name: Deploy Amazon ECS task definition
+      # Step 6: Update ECS task definition with the new image
+      - name: Update ECS task definition with new image
+        id: update-task-def
+        run: |
+          IMAGE_TAG=${{ steps.build-image.outputs.image }}
+          CONTAINER_NAME=${{ env.CONTAINER_NAME }}
+          
+          # Update the ECS task definition JSON with the new image
+          jq --arg image "$IMAGE_TAG" \
+             '.containerDefinitions[0].image = $image' ecs-task-definition.json > updated-task-definition.json
+
+          # Register the updated task definition
+          aws ecs register-task-definition \
+            --cli-input-json file://updated-task-definition.json
+
+      # Step 7: Deploy the updated task definition to ECS
+      - name: Deploy to ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@df9643053eda01f169e64a0e60233aacca83799a
         with:
-          task-definition: ${{ steps.task-def.outputs.task-definition }}
+          task-definition: ${{ steps.update-task-def.outputs.task-definition }}
           service: ${{ env.ECS_SERVICE }}
           cluster: ${{ env.ECS_CLUSTER }}
           wait-for-service-stability: true
