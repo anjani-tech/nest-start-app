@@ -75,12 +75,12 @@ jobs:
           
           # Register the modified task definition
           new_task_definition_arn=$(aws ecs register-task-definition \
-            --family ${{ env.ECS_TASK_DEFINITION }} \
             --cli-input-json file://new_task_definition.json \
             --region ${{ env.AWS_REGION }} \
             --query "taskDefinition.taskDefinitionArn" \
             --output text)
 
+          # Print the ARN of the new task definition
           echo "New Task Definition ARN: $new_task_definition_arn"
           echo "new_task_definition_arn=$new_task_definition_arn" >> $GITHUB_ENV
 
