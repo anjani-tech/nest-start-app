@@ -62,20 +62,23 @@ jobs:
 
       - name: Modify ECS task definition with new image
         run: |
+          # Use jq to clean up the task definition by removing non-required fields
+          jq 'del(.taskDefinitionArn, .revision, .status, .registeredAt, .registeredBy, .requiresAttributes, .compatibilities)' task_definition.json > new_task_definition.json
+
           # Update the task definition JSON with the new image
           jq --arg IMAGE "${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}" \
-            '.containerDefinitions[0].image = $IMAGE' task_definition.json > new_task_definition.json
+            '.containerDefinitions[0].image = $IMAGE' new_task_definition.json > final_task_definition.json
 
       - name: Register new ECS task definition
         id: register_task_definition
         run: |
-          # Print the new task definition to debug
-          echo "New Task Definition JSON:"
-          cat new_task_definition.json
-          
+          # Print the final task definition JSON for debugging
+          echo "Final Task Definition JSON:"
+          cat final_task_definition.json
+
           # Register the modified task definition
           new_task_definition_arn=$(aws ecs register-task-definition \
-            --cli-input-json file://new_task_definition.json \
+            --cli-input-json file://final_task_definition.json \
             --region ${{ env.AWS_REGION }} \
             --query "taskDefinition.taskDefinitionArn" \
             --output text)
