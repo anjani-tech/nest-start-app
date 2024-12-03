@@ -10,6 +10,7 @@ jobs:
   # First job for Build (install dependencies, lint, and build the project)
   build:
     runs-on: ubuntu-latest
+    name: Build Project
     steps:
       # Checkout the code
       - name: Checkout code
@@ -19,14 +20,14 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v2
         with:
-          node-version: '18' # Specify the Node.js version you want to use
+          node-version: '18'  # Specify the Node.js version you want to use
 
       # Install dependencies
       - name: Install dependencies
         run: |
           npm ci
 
-      # Build the project (for example, using NestJS CLI)
+      # Build the project (using NestJS CLI)
       - name: Build project
         run: |
           npm run build
@@ -34,6 +35,7 @@ jobs:
   # Second job for Running Unit Tests
   test:
     runs-on: ubuntu-latest
+    name: Run Unit Tests
     needs: build  # Ensure this job runs after the build job
     steps:
       # Checkout the code
@@ -55,4 +57,3 @@ jobs:
       - name: Run unit tests
         run: |
           npm run test
-
