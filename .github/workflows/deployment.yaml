@@ -57,14 +57,16 @@ jobs:
         id: download-task-def
         run: |
           # Download the current ECS task definition as JSON
-          aws ecs describe-task-definition --task-definition nestjs-server-demo-task \
+          aws ecs describe-task-definition --task-definition ${{ env.ECS_TASK_DEFINITION }} \
             --query taskDefinition > task-definition.json
 
       # Step 6: Update ECS task definition with the new Docker image
       - name: Update ECS task definition with new image
         id: update-task-def
         run: |
-          echo "`jq '.conatinerDefinitions[0].image="${{ steps.build-image.outputs.image}}"' task-definition.json`" > task-definition.json
+          # Fix the typo and correctly update the container image in the task definition
+          jq '.containerDefinitions[0].image="${{ steps.build-image.outputs.image }}"' task-definition.json > updated-task-definition.json
+          mv updated-task-definition.json task-definition.json
 
       # Step 7: Deploy the updated task definition to ECS
       - name: Deploy to ECS
@@ -74,6 +76,8 @@ jobs:
           service: ${{ env.ECS_SERVICE }}
           cluster: ${{ env.ECS_CLUSTER }}
           wait-for-service-stability: true
+
+      # Step 8: Force redeploy if needed
       - name: Force redeploy
         run: |
           aws ecs update-service --cluster ${{ env.ECS_CLUSTER }} --service ${{ env.ECS_SERVICE }} --region ${{ env.AWS_REGION }} --force-new-deployment
