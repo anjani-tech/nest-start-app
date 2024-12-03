@@ -32,14 +32,19 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # Step 3: Login to Amazon ECR Public
+      # Step 3: Verify AWS credentials and account identity
+      - name: Verify AWS credentials
+        run: |
+          aws sts get-caller-identity
+
+      # Step 4: Login to Amazon ECR Public
       - name: Login to Amazon ECR Public
         id: login-ecr-public
         uses: aws-actions/amazon-ecr-login@62f4f872db3836360b72999f4b87f1ff13310f3a
         with:
           registry: ${{ secrets.ECR_REGISTRY }}  # Use the ECR Public registry URL here
 
-      # Step 4: Build, tag, and push the Docker image to Amazon ECR Public
+      # Step 5: Build, tag, and push the Docker image to Amazon ECR Public
       - name: Build, tag, and push image to Amazon ECR Public
         id: build-image
         env:
@@ -52,15 +57,24 @@ jobs:
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
-      # Step 5: Download the current ECS task definition
+      # Step 6: Download the current ECS task definition
       - name: Download ECS task definition
         id: download-task-def
         run: |
           # Download the current ECS task definition as JSON
           aws ecs describe-task-definition --task-definition ${{ env.ECS_TASK_DEFINITION }} \
-            --query taskDefinition > task-definition.json
+            --region ${{ env.AWS_REGION }} --query taskDefinition > task-definition.json
+        continue-on-error: true
 
-      # Step 6: Update ECS task definition with the new Docker image
+      # Step 7: Check if the task definition was downloaded successfully
+      - name: Check task definition download
+        run: |
+          if [ ! -f task-definition.json ]; then
+            echo "ECS task definition not found, aborting deployment!";
+            exit 1;
+          fi
+
+      # Step 8: Update ECS task definition with the new Docker image
       - name: Update ECS task definition with new image
         id: update-task-def
         run: |
@@ -68,7 +82,7 @@ jobs:
           jq '.containerDefinitions[0].image="${{ steps.build-image.outputs.image }}"' task-definition.json > updated-task-definition.json
           mv updated-task-definition.json task-definition.json
 
-      # Step 7: Deploy the updated task definition to ECS
+      # Step 9: Deploy the updated task definition to ECS
       - name: Deploy to ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@df9643053eda01f169e64a0e60233aacca83799a
         with:
@@ -77,7 +91,7 @@ jobs:
           cluster: ${{ env.ECS_CLUSTER }}
           wait-for-service-stability: true
 
-      # Step 8: Force redeploy if needed
+      # Step 10: Force redeploy if needed
       - name: Force redeploy
         run: |
           aws ecs update-service --cluster ${{ env.ECS_CLUSTER }} --service ${{ env.ECS_SERVICE }} --region ${{ env.AWS_REGION }} --force-new-deployment
