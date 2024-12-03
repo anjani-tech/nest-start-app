@@ -1,4 +1,4 @@
-name: Deploy to Amazon ECS and ECR
+name: Deploy to Amazon ECS
 
 on:
   push:
@@ -32,19 +32,21 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # Step 3: Login to Amazon ECR
-      - name: Login to Amazon ECR
-        id: login-ecr
+      # Step 3: Login to Amazon ECR Public
+      - name: Login to Amazon ECR Public
+        id: login-ecr-public
         uses: aws-actions/amazon-ecr-login@62f4f872db3836360b72999f4b87f1ff13310f3a
+        with:
+          registry: ${{ secrets.ECR_REGISTRY }}  # Use the ECR Public registry URL here
 
-      # Step 4: Build, tag, and push the Docker image to Amazon ECR
-      - name: Build, tag, and push image to Amazon ECR
+      # Step 4: Build, tag, and push the Docker image to Amazon ECR Public
+      - name: Build, tag, and push image to Amazon ECR Public
         id: build-image
         env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}  # ECR Public registry URL
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          # Build the Docker image and push it to ECR
+          # Build the Docker image and push it to ECR Public
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
