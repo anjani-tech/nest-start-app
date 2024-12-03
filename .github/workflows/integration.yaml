@@ -1,0 +1,59 @@
+name: NestJS CI Workflow
+
+# Trigger the workflow on push and pull request events
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  # First job for Build (install dependencies, lint, and build the project)
+  build:
+    runs-on: ubuntu-latest
+    name: Build Project
+    steps:
+      # Checkout the code
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      # Set up Node.js environment
+      - name: Set up Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '18'  # Specify the Node.js version you want to use
+
+      # Install dependencies
+      - name: Install dependencies
+        run: |
+          npm ci
+
+      # Build the project (using NestJS CLI)
+      - name: Build project
+        run: |
+          npm run build
+
+  # Second job for Running Unit Tests
+  test:
+    runs-on: ubuntu-latest
+    name: Run Unit Tests
+    needs: build  # Ensure this job runs after the build job
+    steps:
+      # Checkout the code
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      # Set up Node.js environment
+      - name: Set up Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '18'
+
+      # Install dependencies
+      - name: Install dependencies
+        run: |
+          npm ci
+
+      # Run unit tests (use NestJS testing commands)
+      - name: Run unit tests
+        run: |
+          npm run test
