@@ -60,18 +60,30 @@ jobs:
             --query "taskDefinition" \
             --output json)
 
-          # Extract task definition ARN and store it in GITHUB_ENV
+          # Debug output to ensure task definition is correctly fetched
+          echo "Fetched task definition: $task_definition"
+
+          # Store task definition in GITHUB_ENV for use in later steps
+          echo "task_definition=$task_definition" >> $GITHUB_ENV
+
+          # Extract task definition ARN for future use
           task_definition_arn=$(echo "$task_definition" | jq -r '.taskDefinition.taskDefinitionArn')
           echo "task_definition_arn=$task_definition_arn" >> $GITHUB_ENV
-          
-          # Optionally, for debugging: print the full task definition (not to be stored)
-          echo "task_definition=$task_definition"
 
       - name: Register new ECS task definition
         id: register_task_definition
         run: |
+          # Get the task definition from the environment variable
+          task_definition="${{ env.task_definition }}"
+
+          # Ensure task_definition is not empty
+          if [[ -z "$task_definition" ]]; then
+            echo "Error: task_definition is empty or null."
+            exit 1
+          fi
+
           # Update the task definition with the new image
-          new_task_definition=$(echo "${{ env.task_definition }}" | jq '.containerDefinitions[0].image = "${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}"')
+          new_task_definition=$(echo "$task_definition" | jq '.containerDefinitions[0].image = "${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}"')
 
           # Register the new task definition with the updated image
           new_task_definition_arn=$(aws ecs register-task-definition \
