@@ -52,26 +52,17 @@ jobs:
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
-      # Step 5: Get the latest ECS task definition from AWS
-      - name: Get ECS task definition from AWS
-        id: get-task-def
+      # Step 5: Download the current ECS task definition
+      - name: Download ECS task definition
+        id: download-task-def
         run: |
-          # Fetch the latest task definition ARN using family name
-          TASK_DEF_ARN=$(aws ecs describe-task-definitions --family ${{ env.ECS_TASK_DEFINITION }} --max-items 1 --query "taskDefinitions[0].taskDefinitionArn" --output text)
+          # Download the current ECS task definition as JSON
+          aws ecs describe-task-definitions \
+            --family ${{ env.ECS_TASK_DEFINITION }} \
+            --max-items 1 \
+            --query "taskDefinitions[0]" > ecs-task-definition.json
 
-          # Debugging: print the ARN to ensure it's being fetched
-          echo "Fetched Task Definition ARN: $TASK_DEF_ARN"
-
-          # Ensure the task definition ARN is not empty before proceeding
-          if [ -z "$TASK_DEF_ARN" ]; then
-            echo "Error: Could not fetch task definition ARN"
-            exit 1
-          fi
-
-          # Get the task definition JSON by ARN
-          aws ecs describe-task-definition --task-definition $TASK_DEF_ARN --query "taskDefinitions[0]" > ecs-task-definition.json
-
-      # Step 6: Update the ECS task definition with the new image
+      # Step 6: Update ECS task definition with the new Docker image
       - name: Update ECS task definition with new image
         id: update-task-def
         run: |
@@ -82,7 +73,7 @@ jobs:
           jq --arg image "$IMAGE_TAG" \
              '.containerDefinitions[] | select(.name == $CONTAINER_NAME) | .image = $image' ecs-task-definition.json > updated-task-definition.json
 
-          # Register the updated task definition
+          # Register the updated ECS task definition
           aws ecs register-task-definition \
             --cli-input-json file://updated-task-definition.json
 
