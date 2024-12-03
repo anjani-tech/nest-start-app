@@ -57,7 +57,7 @@ jobs:
         id: download-task-def
         run: |
           # Download the current ECS task definition as JSON
-          aws ecs describe-task-definitions \
+          aws ecs describe-task-definition \
             --family ${{ env.ECS_TASK_DEFINITION }} \
             --max-items 1 \
             --query "taskDefinitions[0]" > ecs-task-definition.json
