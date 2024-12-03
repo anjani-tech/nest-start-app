@@ -57,7 +57,7 @@ jobs:
         id: get-task-def
         run: |
           # Fetch the latest task definition ARN using family name
-          TASK_DEF_ARN=$(aws ecs describe-task-definition --family-prefix ${{ env.ECS_TASK_DEFINITION }} --max-items 1 --query "taskDefinitionArns[0]" --output text)
+          TASK_DEF_ARN=$(aws ecs describe-task-definitions --family ${{ env.ECS_TASK_DEFINITION }} --max-items 1 --query "taskDefinitions[0].taskDefinitionArn" --output text)
 
           # Debugging: print the ARN to ensure it's being fetched
           echo "Fetched Task Definition ARN: $TASK_DEF_ARN"
