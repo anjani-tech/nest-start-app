@@ -6,10 +6,10 @@ on:
       - main
 
 env:
-  AWS_REGION: us-east-1                     # AWS region (e.g., us-west-1)
-  ECR_REPOSITORY: nestjs-server-demo         # ECR repository name
-  ECS_SERVICE: nestjs-server-demo-service   # ECS service name
-  ECS_CLUSTER: nestjs-server-demo-cluster   # ECS cluster name
+  AWS_REGION: us-east-1                    # AWS region (e.g., us-west-1)
+  ECR_REPOSITORY: nestjs-server-demo       # ECR repository name
+  ECS_SERVICE: nestjs-server-demo-service  # ECS service name
+  ECS_CLUSTER: nestjs-server-demo-cluster  # ECS cluster name
   ECS_TASK_DEFINITION: nestjs-server-demo-task # ECS task definition family name (not file path)
   CONTAINER_NAME: nestjs-server-demo-container # Container name in ECS task definition
 
@@ -21,65 +21,66 @@ jobs:
 
     steps:
       # Step 1: Checkout the repository
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
 
       # Step 2: Configure AWS credentials for deployment
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@0e613a0980cbf65ed5b322eb7a1e075d28913a83
+        uses: aws-actions/configure-aws-credentials@v1
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
       # Step 3: Login to Amazon ECR Public
-      - name: Login to Amazon ECR Public
-        id: login-ecr-public
-        uses: aws-actions/amazon-ecr-login@62f4f872db3836360b72999f4b87f1ff13310f3a
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
         with:
-          registry: ${{ secrets.ECR_REGISTRY }}  # Use the ECR Public registry URL here
+          registry: ${{ secrets.ECR_REGISTRY }}  # Use your ECR registry URL here
 
-      # Step 4: Build, tag, and push the Docker image to Amazon ECR Public
-      - name: Build, tag, and push image to Amazon ECR Public
+      # Step 4: Build, tag, and push Docker image to ECR
+      - name: Build, tag, and push Docker image
         id: build-image
         env:
           ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}  # ECR Public registry URL
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          # Build the Docker image and push it to ECR Public
-          aws ecr-public get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
+          # Build the Docker image and push it to ECR
+          aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin $ECR_REGISTRY
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
-      # Step 5: Get the latest ECS task definition from AWS
-      - name: Get ECS task definition from AWS
+      # Step 5: Get the latest ECS task definition
+      - name: Get ECS task definition
         id: get-task-def
         run: |
-          # Fetch the latest task definition ARN using family name
+          # Fetch the latest task definition ARN using the family name
           TASK_DEF_ARN=$(aws ecs describe-task-definitions --family-prefix ${{ env.ECS_TASK_DEFINITION }} --max-items 1 --query "taskDefinitionArns[0]" --output text)
           
           # Get the task definition JSON by ARN
-          aws ecs describe-task-definitions --task-definition $TASK_DEF_ARN --query "taskDefinitions[0]" > ecs-task-definition.json
+          aws ecs describe-task-definition --task-definition $TASK_DEF_ARN --query "taskDefinition" > ecs-task-definition.json
+          echo "task-def-arn=$TASK_DEF_ARN" >> $GITHUB_ENV
 
-      # Step 6: Update the ECS task definition with the new image
+      # Step 6: Update ECS task definition with new image
       - name: Update ECS task definition with new image
         id: update-task-def
         run: |
           IMAGE_TAG=${{ steps.build-image.outputs.image }}
           CONTAINER_NAME=${{ env.CONTAINER_NAME }}
-
+          
           # Update the ECS task definition JSON with the new image tag
           jq --arg image "$IMAGE_TAG" \
              '.containerDefinitions[] | select(.name == $CONTAINER_NAME) | .image = $image' ecs-task-definition.json > updated-task-definition.json
-
+          
           # Register the updated task definition
           aws ecs register-task-definition \
             --cli-input-json file://updated-task-definition.json
 
-      # Step 7: Deploy the updated task definition to ECS
+      # Step 7: Deploy to ECS
       - name: Deploy to ECS
-        uses: aws-actions/amazon-ecs-deploy-task-definition@df9643053eda01f169e64a0e60233aacca83799a
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
         with:
           task-definition: ${{ steps.update-task-def.outputs.task-definition }}
           service: ${{ env.ECS_SERVICE }}
