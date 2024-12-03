@@ -69,6 +69,10 @@ jobs:
       - name: Register new ECS task definition
         id: register_task_definition
         run: |
+          # Print the new task definition to debug
+          echo "New Task Definition JSON:"
+          cat new_task_definition.json
+          
           # Register the modified task definition
           new_task_definition_arn=$(aws ecs register-task-definition \
             --family ${{ env.ECS_TASK_DEFINITION }} \
