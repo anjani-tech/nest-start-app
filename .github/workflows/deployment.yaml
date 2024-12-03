@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      AWS_REGION: 'us-east-1'  # Adjust the region if needed
+      AWS_REGION: 'us-east-1'  # Adjust the region if needed updated
       ECR_REPOSITORY: 'my-ecr-repo'  # Your ECR repository name
       ECS_CLUSTER: 'my-ecs-cluster'  # Your ECS Cluster name
       ECS_SERVICE: 'my-ecs-service'  # Your ECS Service name
