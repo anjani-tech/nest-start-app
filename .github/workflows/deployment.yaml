@@ -59,9 +59,14 @@ jobs:
           # Fetch the latest task definition ARN using family name
           TASK_DEF_ARN=$(aws ecs describe-task-definition --family-prefix ${{ env.ECS_TASK_DEFINITION }} --max-items 1 --query "taskDefinitionArns[0]" --output text)
 
-          
+          # Ensure the task definition ARN is not empty before proceeding
+          if [ -z "$TASK_DEF_ARN" ]; then
+            echo "Error: Could not fetch task definition ARN"
+            exit 1
+          fi
+
           # Get the task definition JSON by ARN
-          aws ecs describe-task-definitions --task-definition $TASK_DEF_ARN --query "taskDefinitions[0]" > ecs-task-definition.json
+          aws ecs describe-task-definition --task-definition $TASK_DEF_ARN --query "taskDefinitions[0]" > ecs-task-definition.json
 
       # Step 6: Update the ECS task definition with the new image
       - name: Update ECS task definition with new image
