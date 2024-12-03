@@ -59,6 +59,9 @@ jobs:
           # Fetch the latest task definition ARN using family name
           TASK_DEF_ARN=$(aws ecs describe-task-definition --family-prefix ${{ env.ECS_TASK_DEFINITION }} --max-items 1 --query "taskDefinitionArns[0]" --output text)
 
+          # Debugging: print the ARN to ensure it's being fetched
+          echo "Fetched Task Definition ARN: $TASK_DEF_ARN"
+
           # Ensure the task definition ARN is not empty before proceeding
           if [ -z "$TASK_DEF_ARN" ]; then
             echo "Error: Could not fetch task definition ARN"
