@@ -17,6 +17,7 @@ jobs:
       ECS_TASK_DEFINITION: 'my-task-definition'
       IMAGE_TAG: ${{ github.sha }}
       AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      AWS_DEFAULT_REGION: us-east-1
 
     steps:
       - name: Checkout code
@@ -39,7 +40,7 @@ jobs:
 
       - name: Build Docker image
         run: |
-          aws ecr-public get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY}}
+          aws ecr-public get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
           docker build -t ${{ env.ECR_REPOSITORY }}:$IMAGE_TAG .
 
       - name: Tag Docker image for ECR
@@ -58,15 +59,21 @@ jobs:
             --region ${{ env.AWS_REGION }} \
             --query "taskDefinition" \
             --output json)
+
+          # Extract task definition ARN and store it in GITHUB_ENV
+          task_definition_arn=$(echo "$task_definition" | jq -r '.taskDefinition.taskDefinitionArn')
+          echo "task_definition_arn=$task_definition_arn" >> $GITHUB_ENV
           
-          echo "task_definition=$task_definition" >> $GITHUB_ENV
+          # Optionally, for debugging: print the full task definition (not to be stored)
+          echo "task_definition=$task_definition"
 
       - name: Register new ECS task definition
         id: register_task_definition
         run: |
-          new_task_definition=$(echo ${{ env.task_definition }} | jq '.containerDefinitions[0].image = "${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}"' )
+          # Update the task definition with the new image
+          new_task_definition=$(echo "${{ env.task_definition }}" | jq '.containerDefinitions[0].image = "${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}"')
 
-          # Register new task definition with updated image
+          # Register the new task definition with the updated image
           new_task_definition_arn=$(aws ecs register-task-definition \
             --family ${{ env.ECS_TASK_DEFINITION }} \
             --container-definitions "$new_task_definition" \
@@ -79,7 +86,7 @@ jobs:
 
       - name: Deploy to ECS Service
         run: |
-          # Deploy the new task definition
+          # Deploy the new task definition to ECS
           aws ecs update-service \
             --cluster ${{ env.ECS_CLUSTER }} \
             --service ${{ env.ECS_SERVICE }} \
