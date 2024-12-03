@@ -10,6 +10,86 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
+      AWS_REGION: 'us-east-1'  # Adjust the region if needed
+      ECR_REPOSITORY: 'my-ecr-repo'  # Your ECR repository name
+      ECS_CLUSTER: 'my-ecs-cluster'  # Your ECS Cluster name
+      ECS_SERVICE: 'my-ecs-service'  # Your ECS Service name
+      ECS_TASK_DEFINITION: 'my-task-definition'  # The ECS Task Definition name
+      IMAGE_TAG: ${{ github.sha }}  # Use the Git commit hash as the image version
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up AWS CLI
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Log in to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v1
+        with:
+          region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR    
+        run: |
+            aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY}}
+
+      - name: Build Docker image
+        run: |
+          docker build -t ${{ env.ECR_REPOSITORY }}:$IMAGE_TAG .
+
+      - name: Tag Docker image for ECR
+        run: |
+          docker tag ${{ env.ECR_REPOSITORY }}:$IMAGE_TAG ${{ secrets.ECR_REGISTRY}}/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG
+
+      - name: Push Docker image to ECR
+        run: |
+          docker push ${{ secrets.ECR_REGISTRY}}/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG
+
+      - name: Update ECS Task Definition with new image
+        id: update_task
+        run: |
+          # Fetch the current ECS task definition
+          task_definition=$(aws ecs describe-task-definition --task-definition ${{ env.ECS_TASK_DEFINITION }} --region ${{ env.AWS_REGION }})
+          
+          # Create a new task definition with the updated image
+          new_task_definition=$(echo $task_definition | jq '.taskDefinition | del(.revision)' | jq '.taskDefinition.containerDefinitions[0].image = "${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}"')
+
+          # Register the new task definition revision
+          new_task_definition_arn=$(aws ecs register-task-definition \
+            --family ${{ env.ECS_TASK_DEFINITION }} \
+            --container-definitions "$new_task_definition" \
+            --region ${{ env.AWS_REGION }} \
+            --query "taskDefinition.taskDefinitionArn" \
+            --output text)
+
+          echo "New Task Definition ARN: $new_task_definition_arn"
+
+      - name: Deploy to ECS Service
+        run: |
+          # Check that the new task definition ARN is valid
+          echo "Deploying to ECS with task definition ARN: $new_task_definition_arn"
+          
+          # Update the ECS service with the new task definition revision
+          aws ecs update-service --cluster ${{ env.ECS_CLUSTER }} --service ${{ env.ECS_SERVICE }} --task-definition $new_task_definition_arn --region ${{ env.AWS_REGION }}
+name: Deploy to ECS
+
+on:
+  push:
+    branches:
+      - 'main'  # Trigger deployment on push to the 'main' branch
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    env:
       AWS_REGION: 'us-east-1'  # Adjust the region if needed updated
       ECR_REPOSITORY: 'my-ecr-repo'  # Your ECR repository name
       ECS_CLUSTER: 'my-ecs-cluster'  # Your ECS Cluster name
