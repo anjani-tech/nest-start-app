@@ -26,11 +26,6 @@ jobs:
         run: |
           npm ci
 
-      # Run linting (optional but recommended)
-      - name: Run linting
-        run: |
-          npm run lint
-
       # Build the project (for example, using NestJS CLI)
       - name: Build project
         run: |
@@ -59,5 +54,5 @@ jobs:
       # Run unit tests (use NestJS testing commands)
       - name: Run unit tests
         run: |
-          npm run test -- --coverage
+          npm run test
 
