@@ -54,35 +54,25 @@ jobs:
       - name: Fetch current ECS task definition
         id: fetch_task_definition
         run: |
-          task_definition=$(aws ecs describe-task-definition \
+          aws ecs describe-task-definition \
             --task-definition ${{ env.ECS_TASK_DEFINITION }} \
             --region ${{ env.AWS_REGION }} \
             --query "taskDefinition" \
-            --output json)
+            --output json > task_definition.json
 
-          # Extract task definition ARN and store it in GITHUB_ENV
-          task_definition_arn=$(echo "$task_definition" | jq -r '.taskDefinition.taskDefinitionArn')
-          echo "task_definition_arn=$task_definition_arn" >> $GITHUB_ENV
-          
-          # Optionally, for debugging: print the full task definition (not to be stored)
-          echo "task_definition=$task_definition" 
+      - name: Modify ECS task definition with new image
+        run: |
+          # Update the task definition JSON with the new image
+          jq --arg IMAGE "${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}" \
+            '.containerDefinitions[0].image = $IMAGE' task_definition.json > new_task_definition.json
 
       - name: Register new ECS task definition
         id: register_task_definition
         run: |
-          # Ensure the current task definition is loaded properly
-          current_task_definition=${{ steps.fetch_task_definition.outputs.task_definition }}
-
-          # Update the task definition with the new image
-          new_task_definition=$(echo "$current_task_definition" | jq --arg IMAGE "${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}" \
-            '.containerDefinitions[0].image = $IMAGE')
-          
-          echo "New Task Definition: $new_task_definition"
-          
-          # Register the new task definition with the updated image
+          # Register the modified task definition
           new_task_definition_arn=$(aws ecs register-task-definition \
             --family ${{ env.ECS_TASK_DEFINITION }} \
-            --container-definitions "$new_task_definition" \
+            --cli-input-json file://new_task_definition.json \
             --region ${{ env.AWS_REGION }} \
             --query "taskDefinition.taskDefinitionArn" \
             --output text)
